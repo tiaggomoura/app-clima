@@ -1,0 +1,29 @@
+<mat-grid-list cols="2" rowHeight="200px">
+  <mat-grid-tile colspan="2">
+    <h1 class="mat-display-1">Consulte informações sobre o clima de sua cidade</h1>
+  </mat-grid-tile>
+  <mat-grid-tile colspan="2">
+    <form class="example-form">
+      <mat-form-field class="example-full-width">
+        <mat-label for="city">Cidade</mat-label>
+        <input matInput placeholder="Informe uma cidade" name="city" [(ngModel)]="city" (change)="clearInfo()">
+      </mat-form-field>
+    </form>
+    <button mat-raised-button color="primary" (click)="findByCity(city)" style="margin-left: 2%;">Pesquisar</button>
+  </mat-grid-tile>
+  <mat-grid-tile colspan="2" *ngIf="weatherDTO">
+      <mat-card class="example-card">
+      <mat-card-header>
+           <mat-card-title>Previsão para {{city}}</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <div class="flex-container">
+          <div><span class="label-custom">Temperatura : {{weatherDTO.temp}}°C</span></div>
+          <div><span class="label-custom">Umidade : {{weatherDTO.humidity}}%</span></div>
+          <div><span class="label-custom">País : {{weatherDTO.country}}</span></div>
+          <div><span class="label-custom">Descrição : {{weatherDTO.description}}</span></div>
+        </div>
+      </mat-card-content>
+   </mat-card>
+  </mat-grid-tile>
+</mat-grid-list>
