@@ -4,4 +4,4 @@ This project was generated with [Angular CLI](https://github.com/angular/angular
 
 ## Build
 
-Download Docker,build image, run container and acess http://localhost:8000
+Download Docker,build image, run container and go to http://localhost:8000
