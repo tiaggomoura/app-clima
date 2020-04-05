@@ -9,14 +9,13 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { SeachWeatherService } from '../services/seach-weather.service'
 import { ShowWeatherComponent } from '../components/show-weather/show-weather.component';
 import { FormsModule }   from '@angular/forms';
-import { TesteComponent } from './teste/teste.component';
 import { ToastrModule } from 'ngx-toastr';
+
 
 @NgModule({
   declarations: [
     AppComponent,
-    ShowWeatherComponent,
-    TesteComponent
+    ShowWeatherComponent
   ],
   imports: [
     BrowserModule,
