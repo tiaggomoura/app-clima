@@ -1,0 +1,106 @@
+fun processEligibleSignature(eligibleSignature: EligibleSignatureProposalEntity): Boolean {
+        var isSuccess = true
+        var msgLOG = Message.PROPOSAL_REGISTRATION_FINISH
+        var processDecision = false
+
+        try {
+            logger.info { "processEligibleSignature proposal: ${eligibleSignature.codProposalNumber} - ${LocalDateTime.now()}" }
+            if (checkWorkflowDecision(eligibleSignature.codProposalNumber, stepWorkflowElegibleSignatureApp)) {
+                updateFinishProposal(eligibleSignature.codProposalNumber)
+                processDecision = true
+            }
+            val isCorbanDecision =
+                checkWorkflowDecision(eligibleSignature.codProposalNumber, stepWorkflowElegibleSignatureCorban)
+            if (processDecision || isCorbanDecision) {
+                if (isCorbanDecision) setBankAccount(
+                    eligibleSignature.codProposalNumber,
+                    eligibleSignature.codCustomerId
+                )
+                logger.info { "Update Workflow Initial proposal: ${eligibleSignature.codProposalNumber} - ${LocalDateTime.now()}" }
+                msgLOG = Message.OBSERVATION_INCLUSION
+                saveNote(eligibleSignature.codProposalNumber, MSG_PROPOSAL_PROCESS_INIT)
+                msgLOG = Message.PROPOSAL_KIT_RETRIEVAL
+                val kitInformation = getKitInformation(eligibleSignature.codProposalNumber)
+                logger.info { "Initialized signature process. proposal: ${eligibleSignature.codProposalNumber} - ${LocalDateTime.now()}" }
+                msgLOG = Message.SIGNATURE_DATA_SAVE
+                if (!isMetaData(
+                        eligibleSignature.docEmail,
+                        eligibleSignature.codProposalNumber,
+                        eligibleSignature.codClientIp
+                    )
+                ) {
+                    insertMetaData(
+                        LocalDateTime.now(),
+                        eligibleSignature.docEmail,
+                        eligibleSignature.codProposalNumber,
+                        eligibleSignature.codClientIp,
+                        if (debitAccountVersionIsValid(
+                                eligibleSignature.codProposalNumber,
+                                eligibleSignature.codAppVersion
+                            )
+                        ) {
+                            "T"
+                        } else {
+                            "F"
+                        },
+                        eligibleSignature.codCustomerId
+                    )
+                } else {
+                    msgLOG = Message.SIGNATURE_DATA_SAVE
+                    throw Exception("Dados obrigatórios não enviados: Email e/ou IP do Dispositivo.")
+                }
+                msgLOG = Message.PROPOSAL_CCB_SAVE
+                val docBase64 = kitInformation?.let {
+                    genereteCCB(
+                        eligibleSignature,
+                        it.technicalName,
+                        kitInformation.checklistSequence
+                    )
+                }
+                eligibleSignature.datSignedDate = LocalDateTime.now()
+                saveNote(eligibleSignature.codProposalNumber, MSG_PROPOSAL_PROCESS_CCB_SUCCESS)
+                msgLOG = Message.PROPOSAL_DATA_SAVE
+                eligibleSignature.codHash = docBase64?.let { base64 -> hashGenerate(base64, eligibleSignature) }
+
+                eligibleSignature.codStatus = StatusType.PROCESSED_SUCCESSFULLY
+                eligibleSignatureRepository.update(eligibleSignature)
+
+                // TODO: Aqui deve validar fase esteira
+                msgLOG = Message.PROPOSAL_APPROVAL
+                updateWorkflow(eligibleSignature.codProposalNumber)
+                logger.info { "Process completed. proposal: ${eligibleSignature.codProposalNumber} signed- ${LocalDateTime.now()}" }
+            } else {
+                if (eligibleSignature.qtdeExecutions == Constants.quantityExecutions) {
+                    eligibleSignature.codStatus = getStatusSignature(eligibleSignature)
+                    eligibleSignatureRepository.update(eligibleSignature)
+                    logger.warn { "WARNNING: Process completed proposal: ${eligibleSignature.codProposalNumber} signature not decision signature - ${LocalDateTime.now()}" }
+                    saveNote(eligibleSignature.codProposalNumber, MSG_PROPOSAL_DECISION_NOT_SIGNATURE)
+                    setRistory(
+                        eligibleSignature,
+                        "WARNNING: Process completed proposal: ${eligibleSignature.codProposalNumber} signature not decision signature - ${LocalDateTime.now()}"
+                    )
+                    throw ElegibileException("Signature not decision signature")
+                }
+            }
+        } catch (ex: Exception) {
+            logger.error { "ERROR: Process proposal: ${eligibleSignature.codProposalNumber} not signed- ${LocalDateTime.now()} \n step: ${msgLOG.title} \nStackTrace:  ${ex.message}" }
+            try {
+                eligibleSignature.codStatus = getStatusSignature(eligibleSignature)
+                eligibleSignatureRepository.update(eligibleSignature)
+                setRistory(eligibleSignature, "${msgLOG.title} : ${ex.message}")
+                saveNote(
+                    eligibleSignature.codProposalNumber,
+                    "Erro:${msgLOG.message} (error: ${ex.message})"
+                )
+            } catch (e: Exception) {
+                logger.error { "ERROR: Notification error in process proposal: ${eligibleSignature.codProposalNumber} not signed- ${LocalDateTime.now()} \n step: ${msgLOG.title} \nStackTrace:  ${ex.message}" }
+            }
+            isSuccess = false
+        } finally {
+            if (isSuccess && eligibleSignature.codStatus == StatusType.PROCESSED_SUCCESSFULLY) saveNote(
+                eligibleSignature.codProposalNumber,
+                MSG_PROCESS_SIGNATURE_COMPLETED
+            )
+        }
+        return isSuccess
+    }
