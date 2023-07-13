@@ -116,4 +116,4 @@ ftp:
   user: ${ftp_username}
   password: ${ftp_username}
 
-como  posso adaptar minha implemetação para suportar agora conexao com SFTP?
+
