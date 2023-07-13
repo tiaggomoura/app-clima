@@ -1,0 +1,119 @@
+possuo a seguinte implementação para conectar ao FTP utilizando kotlin e org.springframework.integration:spring-integration-sftp
+
+package br.com.uol.pagseguro.directdebit.api.sftp
+
+import org.apache.commons.io.FileUtils
+import org.apache.commons.net.PrintCommandListener
+import org.apache.commons.net.ftp.FTPFile
+import org.apache.commons.net.ftp.FTPReply
+import org.apache.commons.net.ftp.FTPSClient
+import org.apache.commons.net.util.TrustManagerUtils
+import org.springframework.beans.factory.annotation.Value
+import org.springframework.stereotype.Component
+import java.io.ByteArrayOutputStream
+import java.io.File
+import java.io.FileInputStream
+import java.io.IOException
+import java.io.PrintWriter
+import java.nio.file.Files
+import java.nio.file.Path
+import java.nio.file.Paths
+
+@Component
+class FtpsClient(
+    @Value("\${sftp.port}") private val port: Int,
+    @Value("\${sftp.user}") private val user: String,
+    @Value("\${sftp.server}") private val server: String,
+    @Value("\${sftp.password}") private val password: String
+) {
+
+    companion object {
+        private const val PBSZ = 0
+        private const val PROT = "P"
+        private const val AUTH_VALUE = "SSL"
+        private const val TEMP_FILE_PREFIX = "tmp"
+    }
+
+    private val ftps = FTPSClient()
+
+    @Throws(IOException::class)
+    fun open() {
+        configureConnection()
+        ftps.connect(server, port)
+        checkConnection()
+        ftps.login(user, password)
+        configureFtpsConnection()
+    }
+
+    @Throws(IOException::class)
+    fun close() {
+        takeIf { ftps.isConnected }.let {
+            ftps.logout()
+            ftps.disconnect()
+        }
+    }
+
+    @Throws(IOException::class)
+    fun listFiles(path: String?): List<FTPFile> {
+        return listOf(*ftps.listFiles(path))
+    }
+
+    @Throws(IOException::class)
+    fun retrieveFile(filePath: String?): File {
+        val path = Files.createTempFile(TEMP_FILE_PREFIX, null)
+        val outputStream = ByteArrayOutputStream()
+        ftps.retrieveFile(filePath, outputStream)
+        FileUtils.writeByteArrayToFile(path.toFile(), outputStream.toByteArray())
+        return path.toFile()
+    }
+
+    @Throws(IOException::class)
+    fun putFileToPath(path: String, file: File) {
+        val absPath = Paths.get(path, file.name).toString()
+        ftps.storeFile(absPath, FileInputStream(file))
+    }
+
+    @Throws(IOException::class)
+    fun sendFiles(pathToUpload: String, vararg files: Path) {
+        files.forEach { filePath -> putFileToPath(pathToUpload, filePath.toFile()) }
+    }
+
+    @Throws(IOException::class)
+    private fun checkConnection() {
+        val reply = ftps.replyCode
+        takeIf { !FTPReply.isPositiveCompletion(reply) }?.let {
+            ftps.disconnect()
+            throw IOException("Exception in connecting to FTP Server")
+        }
+    }
+
+    private fun configureConnection() {
+        ftps.authValue = AUTH_VALUE
+        ftps.addProtocolCommandListener(PrintCommandListener(PrintWriter(System.out), true))
+        bypassCertificate()
+    }
+
+    @Throws(IOException::class)
+    private fun configureFtpsConnection() {
+        ftps.execPBSZ(PBSZ.toLong())
+        ftps.execPROT(PROT)
+        ftps.enterLocalPassiveMode()
+    }
+
+    private fun bypassCertificate() { // Do not validate certificate, bypass expired certificates
+        ftps.trustManager = TrustManagerUtils.getAcceptAllTrustManager()
+    }
+
+    fun moveFile(source: String, target: String): Boolean = ftps.rename(source, target)
+}
+
+
+minhas configurações no applicattion.yml são as seguintes
+
+ftp:
+  server: 10.185.16.15
+  port: 22
+  user: ${ftp_username}
+  password: ${ftp_username}
+
+como  posso adaptar minha implemetação para suportar agora conexao com SFTP?
